@@ -1,0 +1,105 @@
+{
+    "$schema": "http://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+      "existingVNETName": {
+        "type": "string",
+        "defaultValue": "",
+        "metadata": {
+          "description": "Name of the VNET to add a subnet to."
+        }
+      },
+      "newSubnetName": {
+        "type": "string",
+        "defaultValue": "",
+        "metadata": {
+          "description": "Name of the Subnet to add."
+        }
+      },
+      "newSubnetAddressPrefix": {
+        "type": "string",
+        "defaultValue": "",
+        "metadata": {
+          "description": "Address space of the subnet to add."
+        }
+      },
+      "nsgRGName": {
+        "type": "string",
+        "defaultValue": "",
+        "metadata": {
+          "description": "Name of the subnet NSG Resource Group."
+        }
+      },
+      "nsgName": {
+        "type": "string",
+        "defaultValue": "",
+        "metadata": {
+          "description": "Name of the subnet NSG."
+        }
+      }
+    },
+    "variables":{
+      "subscriptionId": "[subscription().subscriptionId]",
+      "nsgRef": "[concat(resourceId(variables('subscriptionID'), parameters('nsgRGName'), 'Microsoft.Network/networkSecurityGroups', parameters('nsgName')))]"
+    },
+    "resources": [
+      {
+        "apiVersion": "2018-04-01",
+        "type": "Microsoft.Network/virtualNetworks/subnets",
+        "name": "[concat(parameters('existingVNETName'), '/', parameters('newSubnetName'))]",
+        "properties": {
+          "addressPrefix": "[parameters('newSubnetAddressPrefix')]",
+          "networkSecurityGroup": { 
+            "id": "[variables('nsgRef')]"
+          },
+          "serviceEndpoints": [
+              {
+                  "service": "Microsoft.AzureActiveDirectory",
+                  "locations": [
+                      "*"
+                  ]
+              },
+              {
+                  "service": "Microsoft.AzureCosmosDB",
+                  "locations": [
+                      "*"
+                  ]
+              },
+              {
+                  "service": "Microsoft.EventHub",
+                  "locations": [
+                      "*"
+                  ]
+              },
+              {
+                  "service": "Microsoft.KeyVault",
+                  "locations": [
+                      "*"
+                  ]
+              },
+              {
+                  "provisioningState": "Succeeded",
+                  "service": "Microsoft.ServiceBus",
+                  "locations": [
+                      "*"
+                  ]
+              },
+              {
+                  "service": "Microsoft.Sql",
+                  "locations": [
+                      "eastus2"
+                  ]
+              },
+              {
+                  "service": "Microsoft.Storage",
+                  "locations": [
+                      "eastus2",
+                      "centralus"
+                  ]
+              }
+          ]
+        }
+      }
+    ],
+    "outputs": {}
+  }

@@ -1,0 +1,339 @@
+{
+    "$schema": "http://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "gatewayName": {
+            "type": "string",
+            "defaultValue": "",
+            "metadata": {
+                "description": "Name of the Application Gateway resource."
+            }
+        },
+        "gatewayLocation": {
+            "type": "string",
+            "defaultValue": "",
+            "metadata": {
+                "description": "Azure region where the Application Gateway resource is located."
+            }
+        },
+        "capacity": {
+            "type": "int",
+            "allowedValues": [
+                1,
+                2,
+                3,
+                4,
+                5,
+                6,
+                7,
+                8,
+                9,
+                10
+            ],
+            "defaultValue": 2,
+            "metadata": {
+                "description": "Number of Autoscaling VM instances."
+            }
+        },
+        "vnetRGName": {
+            "type": "string",
+            "defaultValue": "",
+            "metadata": {
+                "description": "Name of the Resource Group that contains Virtual Network."
+            }
+        },
+        "vnetName": {
+            "type": "string",
+            "defaultValue": "",
+            "metadata": {
+                "description": "Name of the Virtual Network."
+            }
+        },
+        "subnetName": {
+            "type": "string",
+            "defaultValue": "",
+            "metadata": {
+                "description": "Name of the Public Subnet."
+            }
+        },
+        "enableHttp2": {
+            "type": "bool",
+            "defaultValue": true,
+            "metadata": {
+                "description": "Whether HTTP2 is enabled on the application gateway resource."
+            }
+        },
+        "idleTimeout": {
+            "type": "int",
+            "defaultValue": 4,
+            "metadata": {
+                "description": "IP address idle timeout in minutes."
+            }
+        },
+        "domainNameLabel": {
+            "type": "string",
+            "defaultValue": "",
+            "metadata": {
+                "description": "Name of the DNS Settings Domain Label."
+            }
+        },
+        "backendFQDN": {
+            "type": "string",
+            "metadata": {
+                "description": "Backend Fully Qualified Domain Name."
+            }
+        },
+        "frontendCertData": {
+          "type": "string",
+          "metadata": {
+            "description": "Base-64 encoded form of the .pfx file. This is the cert terminating on the Application Gateway."
+          }
+        },
+        "frontendCertPassword": {
+          "type": "securestring",
+          "metadata": {
+            "description": "Password for .pfx certificate"
+          }
+        }
+    },
+    "variables": {
+        "uniqueDNSLabel": "[concat(parameters('domainNameLabel'), '-', uniqueString(resourceGroup().id))]",
+        "subscriptionId": "[subscription().subscriptionId]",
+        "gatewayLocation": "[toLower(replace(if(empty(parameters('gatewayLocation')), resourceGroup().location, parameters('gatewayLocation')), ' ', ''))]",
+        "vnetID": "[resourceId(variables('subscriptionID'), parameters('vnetRGName'), 'Microsoft.Network/virtualNetworks', parameters('vnetName'))]",
+        "vnetSubnetID": "[concat(variables('vnetID'),'/subnets/', parameters('subnetName'))]",
+        "publicIpAddressName": "[concat(parameters('gatewayName'),'-IP')]",
+        "publicIPRef": "[resourceId('Microsoft.Network/publicIPAddresses/', variables('publicIpAddressName'))]",
+        "applicationGatewayID": "[resourceId('Microsoft.Network/applicationGateways', parameters('gatewayName'))]",
+        "locationLabel": "[toLower(replace(parameters('gatewayLocation'), ' ', ''))]",
+        "fullyQualifiedDomainName": "[concat(variables('uniqueDNSLabel'),'.', variables('locationLabel'), '.cloudapp.azure.com')]",
+        "appGatewayFrontendIPRef": "[concat(variables('applicationGatewayID'), '/frontendIPConfigurations/appGatewayFrontendIP')]",
+        "appGatewayFrontendPortRef80": "[concat(variables('applicationGatewayID'), '/frontendPorts/appGatewayFrontendPort80')]",
+        "appGatewayFrontendPortRef443": "[concat(variables('applicationGatewayID'), '/frontendPorts/appGatewayFrontendPort443')]",
+        "backendAddressPoolRef": "[concat(variables('applicationGatewayID'), '/backendAddressPools/appGatewayBackendPool')]",
+        "httpsListenerRef": "[concat(variables('applicationGatewayID'), '/httpListeners/https-listener')]",
+        "redirectHttpToHttpsListenerRef": "[concat(variables('applicationGatewayID'), '/httpListeners/http-to-https-listener')]",
+        "backendHttpSettingsRef": "[concat(variables('applicationGatewayID'), '/backendHttpSettingsCollection/https-settings')]",
+        "redirectHttpToHttpsRuleRef": "[concat(variables('applicationGatewayID'), '/requestRoutingRules/http-to-https-rule')]",
+        "httpToHttpsRedirectRef": "[concat(variables('applicationGatewayID'), '/redirectConfigurations/http-to-https-redirect')]",
+        "backendProbeRef": "[concat(variables('applicationGatewayID'), '/probes/https-probe')]",
+        "frontendSslCertRef": "[concat(variables('applicationGatewayID'), '/sslCertificates/appGatewayFrontEndSslCert')]"
+    },
+    "resources": [
+        {
+            "type": "Microsoft.Network/publicIPAddresses",
+            "apiVersion": "2018-12-01",
+            "name": "[variables('publicIpAddressName')]",
+            "location": "[variables('gatewayLocation')]",
+            "sku": {
+                "name": "Basic"
+            },
+            "properties": {
+                "publicIPAllocationMethod": "Dynamic",
+                "idleTimeoutInMinutes": "[parameters('idleTimeout')]",
+                "dnsSettings": {
+                    "domainNameLabel": "[variables('uniqueDNSLabel')]",
+                    "fqdn": "[variables('fullyQualifiedDomainName')]"
+                }
+            }
+        },
+        {
+            "name": "[parameters('gatewayName')]",
+            "type": "Microsoft.Network/applicationGateways",
+            "apiVersion": "2018-12-01",
+            "location": "[variables('gatewayLocation')]",
+            "dependsOn": [
+                "[variables('publicIPRef')]"
+            ],
+            "properties": {
+                "sku": {
+                    "name": "WAF_Medium",
+                    "tier": "WAF",
+                    "capacity": "[parameters('capacity')]"
+                },
+                "gatewayIPConfigurations": [
+                    {
+                        "name": "appGatewayIpConfig",
+                        "properties": {
+                            "subnet": {
+                                "id": "[variables('vnetSubnetID')]"
+                            }
+                        }
+                    }
+                ],
+                "sslCertificates": [
+                    {
+                        "name": "appGatewayFrontEndSslCert",
+                        "properties": {
+                            "data": "[parameters('frontendCertData')]",
+                            "password": "[parameters('frontendCertPassword')]"
+                        }
+                    }
+                ],
+                "authenticationCertificates": [],
+                "frontendIPConfigurations": [
+                    {
+                        "name": "appGatewayFrontendIP",
+                        "properties": {
+                            "PublicIPAddress": {
+                                "id": "[variables('publicIPRef')]"
+                            }
+                        }
+                    }
+                ],
+                "frontendPorts": [
+                    {
+                        "name": "appGatewayFrontendPort443",
+                        "properties": {
+                            "port": 443
+                        }
+                    },
+                    {
+                        "name": "appGatewayFrontendPort80",
+                        "properties": {
+                            "port": 80
+                        }
+                    }
+                ],
+                "backendAddressPools": [
+                    {
+                        "name": "appGatewayBackendPool",
+                        "properties": {
+                            "BackendAddresses": [
+                                {
+                                    "Fqdn": "[parameters('backendFQDN')]"
+                                }
+                            ]
+                        }
+                    }
+                ],
+                "backendHttpSettingsCollection": [
+                    {
+                        "name": "https-settings",
+                        "properties": {
+                            "port": 443,
+                            "protocol": "Https",
+                            "cookieBasedAffinity": "Disabled",
+                            "pickHostNameFromBackendAddress": true,
+                            "requestTimeout": 30,
+                            "ProbeEnabled": true,
+                            "probe": {
+                                "id": "[variables('backendProbeRef')]"
+                            }
+                        }
+                    }
+                ],
+                "httpListeners": [
+                    {
+                        "name": "https-listener",
+                        "properties": {
+                            "frontendIPConfiguration": {
+                                "id": "[variables('appGatewayFrontendIPRef')]"
+                            },
+                            "frontendPort": {
+                                "id": "[variables('appGatewayFrontendPortRef443')]"
+                            },
+                            "protocol": "Https",
+                            "sslCertificate": {
+                                "id": "[variables('frontendSslCertRef')]"
+                            },
+                            "requireServerNameIndication": false
+                        }
+                    },
+                    {
+                        "name": "http-to-https-listener",
+                        "properties": {
+                            "frontendIPConfiguration": {
+                                "id": "[variables('appGatewayFrontendIPRef')]"
+                            },
+                            "frontendPort": {
+                                "id": "[variables('appGatewayFrontendPortRef80')]"
+                            },
+                            "protocol": "Http",
+                            "requireServerNameIndication": false
+                        }
+                    }
+                ],
+                "requestRoutingRules": [
+                    {
+                        "name": "https-rule",
+                        "properties": {
+                            "ruleType": "Basic",
+                            "httpListener": {
+                                "id": "[variables('httpsListenerRef')]"
+                            },
+                            "backendAddressPool": {
+                                "id": "[variables('backendAddressPoolRef')]"
+                            },
+                            "backendHttpSettings": {
+                                "id": "[variables('backendHttpSettingsRef')]"
+                            }
+                        }
+                    },
+                    {
+                        "name": "http-to-https-rule",
+                        "properties": {
+                            "ruleType": "Basic",
+                            "httpListener": {
+                                "id": "[variables('redirectHttpToHttpsListenerRef')]"
+                            },
+                            "redirectConfiguration": {
+                                "id": "[variables('httpToHttpsRedirectRef')]"
+                            }
+                        }
+                    }
+                ],
+                "probes": [
+                    {
+                        "name": "https-probe",
+                        "properties": {
+                            "protocol": "Https",
+                            "path": "/",
+                            "interval": 30,
+                            "timeout": 120,
+                            "unhealthyThreshold": 3,
+                            "pickHostNameFromBackendHttpSettings": true,
+                            "minServers": 0,
+                            "match": {
+                                "body": "",
+                                "statusCodes": [
+                                    "200-399",
+                                    "404"
+                                ]
+                            }
+                        }
+                    }
+                ],
+                "redirectConfigurations": [
+                    {
+                        "name": "http-to-https-redirect",
+                        "properties": {
+                            "redirectType": "Temporary",
+                            "targetListener": {
+                                "id": "[variables('httpsListenerRef')]"
+                            },
+                            "includePath": true,
+                            "includeQueryString": true,
+                            "requestRoutingRules": [
+                                {
+                                    "id": "[variables('redirectHttpToHttpsRuleRef')]"
+                                }
+                            ]
+                        }
+                    }
+                ],
+                "enableHttp2": "[parameters('enableHttp2')]",
+                "sslPolicy": {
+                    "policyType": "Predefined",
+                    "policyName": "AppGwSslPolicy20170401"
+                },
+                "webApplicationFirewallConfiguration": {
+                    "enabled": true,
+                    "firewallMode": "Prevention",
+                    "ruleSetType": "OWASP",
+                    "ruleSetVersion": "3.0"
+                }
+            }
+        }
+    ]
+}

@@ -1,0 +1,133 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "nsgName": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "NSG Name"
+      }
+    },
+    "nsgLocation": {
+      "type": "string",
+      "defaultValue": "eastus2",
+      "metadata": {
+        "description": "Location for the NSG resources."
+      }
+    }
+  },
+  "variables": {
+    "nsgLocation": "[toLower(replace(if(empty(parameters('nsgLocation')), resourceGroup().location, parameters('nsgLocation')), ' ', ''))]"
+  },
+  "resources": [
+    {
+      "apiVersion": "2018-08-01",
+      "type": "Microsoft.Network/networkSecurityGroups",
+      "name": "[parameters('nsgName')]",
+      "location": "[variables('nsgLocation')]",
+      "properties": {
+        "securityRules": [
+          {
+            "name": "My_Home_Network_PAT_Address_443",
+            "properties": {
+              "description": "Connection from CMFG internal servers in Madison",
+              "protocol": "Tcp",
+              "sourcePortRange": "*",
+              "destinationPortRange": "443",
+              "sourceAddressPrefix": "55.55.55.55/32",
+              "destinationAddressPrefix": "*",
+              "access": "Allow",
+              "priority": 100,
+              "direction": "Inbound"
+            }
+          },
+          {
+            "name": "Allow_AppGateway_Internal",
+            "properties": {
+              "description": "Allowing Microsoft internal App Gateway communications",
+              "protocol": "*",
+              "sourcePortRange": "*",
+              "sourceAddressPrefix": "*",
+              "destinationPortRange": "65200-65535",
+              "destinationAddressPrefix": "*",
+              "access": "Allow",
+              "priority": 2000,
+              "direction": "Inbound"
+            }
+          },
+          {
+            "name": "Intra_Subnet_Inbound",
+            "properties": {
+              "description": "Resources within subnet can communicate freely",
+              "protocol": "*",
+              "sourcePortRange": "*",
+              "destinationPortRange": "*",
+              "sourceAddressPrefix": "VirtualNetwork",
+              "destinationAddressPrefix": "VirtualNetwork",
+              "access": "Allow",
+              "priority": 3980,
+              "direction": "Inbound"
+            }
+          },
+          {
+            "name": "AllowAzureLB",
+            "properties": {
+              "description": "Permits load balancing above the deny-all rule",
+              "protocol": "*",
+              "sourcePortRange": "*",
+              "destinationPortRange": "*",
+              "sourceAddressPrefix": "AzureLoadBalancer",
+              "destinationAddressPrefix": "*",
+              "access": "Allow",
+              "priority": 3990,
+              "direction": "Inbound"
+            }
+          },
+          {
+            "name": "DenyAllRuleInbound",
+            "properties": {
+              "description": "Deny-all above permissive default rules - necessary traffic must be permitted above",
+              "protocol": "*",
+              "sourcePortRange": "*",
+              "destinationPortRange": "*",
+              "sourceAddressPrefix": "*",
+              "destinationAddressPrefix": "*",
+              "access": "Deny",
+              "priority": 4000,
+              "direction": "Inbound"
+            }
+          },
+          {
+            "name": "Internet_Subnet_Outbound",
+            "properties": {
+              "description": "Resources within subnet can communicate to the internet",
+              "protocol": "*",
+              "sourcePortRange": "*",
+              "destinationPortRange": "*",
+              "sourceAddressPrefix": "*",
+              "destinationAddressPrefix": "Internet",
+              "access": "Allow",
+              "priority": 2000,
+              "direction": "Outbound"
+            }
+          },
+          {
+            "name": "Intra_Subnet_Outbound",
+            "properties": {
+              "description": "Resources within subnet can communicate freely",
+              "protocol": "*",
+              "sourcePortRange": "*",
+              "destinationPortRange": "*",
+              "sourceAddressPrefix": "VirtualNetwork",
+              "destinationAddressPrefix": "VirtualNetwork",
+              "access": "Allow",
+              "priority": 3990,
+              "direction": "Outbound"
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,45 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "vnetName": {
+            "type": "string",
+            "defaultValue": "",
+            "metadata": {
+                "description": "Name of the Virtual Network resource."
+            }
+        },
+        "addressPrefix": {
+            "type": "string",
+            "defaultValue": "10.0.0.0/16",
+            "metadata": {
+                "description": "Address prefix for the Virtual Network."
+            }
+        },
+        "vnetLocation": {
+            "type": "string",
+            "defaultValue": "eastus2",
+            "metadata": {
+                "description": "Location for the Virtual Network resource."
+            }
+        }
+    },
+    "variables": {
+        "vnetLocation": "[toLower(replace(if(empty(parameters('vnetLocation')), resourceGroup().location, parameters('vnetLocation')), ' ', ''))]"
+    },
+    "resources": [
+        {
+            "apiVersion": "2018-08-01",
+            "type": "Microsoft.Network/virtualNetworks",
+            "name": "[parameters('vnetName')]",
+            "location": "[variables('vnetLocation')]",
+            "properties": {
+                "addressSpace": {
+                    "addressPrefixes": [
+                        "[parameters('addressPrefix')]"
+                    ]
+                }
+            }
+        }
+    ]
+}
